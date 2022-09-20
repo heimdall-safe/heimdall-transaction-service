@@ -1,0 +1,16 @@
+database:
+    build: database
+webapp:
+    build: webapp:
+    command: gunicorn -b 0.0.0.0:8000 wsgi:application # production setting
+    volumes:
+        - webapp/your_project_name:/path/to/container/workdir/
+    links:
+        - database
+webserver:
+    build: webserver
+    ports:
+        - "80:80"
+        - "443:443"
+    links:
+        - webapp

@@ -1,0 +1,107 @@
+# Heimdall Transaction Service
+
+## Based on gnosis safe
+
+- [Docs](https://github.com/gnosis/safe-transaction-service)
+
+## Setup for development
+Use a virtualenv if possible:
+
+```bash
+python -m venv venv
+```
+
+Then enter the virtualenv and install the dependencies:
+
+```bash
+source venv/bin/activate
+pip install -r requirements-dev.txt
+pre-commit install -f
+cp .env.dev .env
+./run_tests.sh
+```
+
+## Setup for development using docker
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+For more parameters check [base.py](config/settings/base.py) file.
+
+## Setup for production (tracing mode)
+This is the recommended configuration for running a production Transaction service. `docker-compose` is required
+for running the project.
+
+``bash
+cp .env.tracing.sample .env
+``
+
+Configure the parameters needed on `.env`. These parameters **need to be changed**:
+- `DJANGO_SECRET_KEY`: Use a **strong key**.
+- `ETHEREUM_NODE_URL`: Http/s address of a ethereum node. It can be the same than `ETHEREUM_TRACING_NODE_URL`.
+- `ETHEREUM_TRACING_NODE_URL`: Http/s address of an OpenEthereum node with
+[tracing enabled](https://openethereum.github.io/JSONRPC-trace-module).
+
+If you don't want to use `trace_filter` for the internal tx indexing and just rely on `trace_block`, set:
+- `ETH_INTERNAL_NO_FILTER=1`
+
+For more parameters check [base.py](config/settings/base.py) file.
+
+Then:
+```bash
+docker-compose build --force-rm
+docker-compose up
+```
+
+The service should be running in `localhost:8000`. You can test everything is set up:
+
+```bash
+curl 'http://localhost:8000/api/v1/about/'
+```
+
+You can go to http://localhost:5555/ to check the status of the task queue, also you can configure
+[prometheus metrics](https://flower.readthedocs.io/en/latest/prometheus-integration.html).
+
+For example, to set up a Göerli node:
+
+Run an OpenEthereum node in your local computer:
+```bash
+openethereum --chain goerli --tracing on --db-path=/media/ethereum/openethereum --unsafe-expose
+```
+
+Edit `.env` so docker points to the host OpenEthereum node:
+```
+ETHEREUM_NODE_URL=http://172.17.0.1:8545
+ETHEREUM_TRACING_NODE_URL=http://172.17.0.1:8545
+```
+
+Then:
+```bash
+docker-compose build --force-rm
+docker-compose up
+```
+
+## Setup for private network
+Instructions for production still apply, but some additional steps are required:
+- Deploy the last version of the [Safe Contracts](https://github.com/gnosis/safe-contracts) on your private network.
+- [Add their addresses and the number of the block they were deployed
+](safe_transaction_service/history/management/commands/setup_service.py) (to optimize initial indexing).
+Service is currently configured to support _Mainnet_, _Rinkeby_, _Goerli_, _Kovan_, _xDai_, _Polygon_, _EWC_...
+- If you have a custom `network id` you can change this line
+`ethereum_network = ethereum_client.get_network()` to `ethereum_network_id = ethereum_client.w3.net.version` and use
+the `network id` instead of the `Enum`.
+- Only contracts that need to be configured are the **ProxyFactory** that will be used to deploy the contracts and
+the **GnosisSafe/GnosisSafeL2**.
+
+## Use admin interface
+Services come with a basic administration web ui (provided by Django) by default on http://localhost:8000/admin/
+
+A user must be created to get access:
+```bash
+docker exec -it safe-transaction-service-web-1 python manage.py createsuperuser
+```
+
+## Troubleshooting
+
+### Issues installing grpc on a Mac M1
+
+If you face issues installing the `grpc` dependency locally (required by this project) on a M1 chip, set `GRPC_PYTHON_BUILD_SYSTEM_OPENSSL=1` and `GRPC_PYTHON_BUILD_SYSTEM_ZLIB=1` and then try to install the dependency again.
